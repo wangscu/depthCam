@@ -16,26 +16,33 @@ for pi in clouds.to_array():
     vertices.InsertNextCell(1)
     vertices.InsertCellPoint(id)
 
+clouds_array = clouds.to_array()
+
+Colors = vtk.vtkUnsignedCharArray()
+Colors.SetNumberOfComponents(3)
+Colors.SetName("Colors")
+for pi in clouds.to_array():
+    Colors.InsertNextTuple3(255,0,0)
+
 # Create a polydata object
-point = vtk.vtkPolyData()
+polydata = vtk.vtkPolyData()
 
 # Set the points and vertices we created as the geometry and topology of the polydata
-point.SetPoints(points)
-point.SetVerts(vertices)
+polydata.SetPoints(points)
+polydata.SetVerts(vertices)
+polydata.GetPointData().SetScalars(Colors)
 
 # Visualize
 mapper = vtk.vtkPolyDataMapper()
-if vtk.VTK_MAJOR_VERSION <= 5:
-    mapper.SetInput(point)
-else:
-    mapper.SetInputData(point)
+mapper.SetInputData(polydata)
 
 actor = vtk.vtkActor()
 actor.SetMapper(mapper)
-actor.GetProperty().SetPointSize(20)
+actor.GetProperty().SetPointSize(1)
 
 renderer = vtk.vtkRenderer()
 renderWindow = vtk.vtkRenderWindow()
+renderWindow.SetSize(1280, 960)
 renderWindow.AddRenderer(renderer)
 renderWindowInteractor = vtk.vtkRenderWindowInteractor()
 renderWindowInteractor.SetRenderWindow(renderWindow)

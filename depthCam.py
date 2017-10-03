@@ -4,6 +4,8 @@ from ctypes import *
 import cv2
 import matplotlib.pyplot as plt
 
+buffer = create_string_buffer(1024*1024*5)
+
 ty._TYInitLib()
 dn = pointer(c_int32())
 ty.TYGetDeviceNumber(dn)
@@ -82,6 +84,26 @@ for i in range(0, frame.validCount):
         import pcl
         p = pcl.PointCloud(pointBuf)
         pcl.save(p, 'pointcloud.pcd')
+
+vectors = (ty.TY_VECT_3F * (height*width))()
+for i,p in enumerate(pointBuf):
+    vectors[i].x = p[0]
+    vectors[i].y = p[1]
+    vectors[i].z = p[2]
+
+ty.TYRegisterWorldToColor(hh, vectors, 0, height*width, buffer, 1024*1024*5)
+colorBuffer = cast(buffer, POINTER(c_uint16 * (1024 * 512 * 5))).contents
+colorBuffer = np.ctypeslib.as_array(colorBuffer)[:rgbBuf.shape[0]*rgbBuf.shape[1]].reshape((rgbBuf.shape[0], rgbBuf.shape[1], 1))
+
+import matplotlib.pyplot as plt
+
+color = colorBuffer/100 + rgbBuf[:, :, 0:1]/2
+plt.imshow(colorBuffer.reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
+plt.imshow(rgbBuf[:, :, 0:1].reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
+#plt.imshow(color.reshape(rgbBuf.shape[0], rgbBuf.shape[1]))  # Needs to be in row,col order
+plt.show()
+plt.savefig('depth.png')
+
 
 '''
     import cv2.aruco as aruco
