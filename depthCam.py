@@ -3,8 +3,11 @@ import numpy as np
 from ctypes import *
 import cv2
 import matplotlib.pyplot as plt
+import vtk
+import pcl
+from vtk.util import numpy_support
 
-buffer = create_string_buffer(1024*1024*5)
+buffer = create_string_buffer(1024 * 1024 * 5)
 
 ty._TYInitLib()
 dn = pointer(c_int32())
@@ -71,61 +74,76 @@ for i in range(0, frame.validCount):
         depthBuf = np.ctypeslib.as_array(depthBuf)
         depthBuf = depthBuf.reshape((height, width))
         np.savetxt('depth.out', depthBuf, delimiter=',', fmt='%.2i')
-        #img = cv2.cvtColor(depthBuf, cv2.COLOR_GRAY2BGR)
-        #cv2.imwrite("depth.png", img)
+        # img = cv2.cvtColor(depthBuf, cv2.COLOR_GRAY2BGR)
+        # cv2.imwrite("depth.png", img)
         import matplotlib.pyplot as plt
 
-        plt.imshow(depthBuf)  # Needs to be in row,col order
-        plt.savefig('depth.png')
+        #plt.imshow(depthBuf)  # Needs to be in row,col order
+        #plt.savefig('depth.png')
         pass
 
     elif image.componentID == ty.TY_COMPONENT_POINT3D_CAM:
         pointBuf = cast(image.buffer, POINTER(c_float * (height * width * 3))).contents
-        pointBuf = np.ctypeslib.as_array(pointBuf).reshape((height*width, 3))
-        pointBufLen = height*width
+        pointBuf = np.ctypeslib.as_array(pointBuf).reshape((height * width, 3))
+        pointBufLen = height * width
         import pcl
+
         p = pcl.PointCloud(pointBuf)
         pcl.save(p, 'pointcloud.pcd')
 
-
 vectors = (ty.TY_VECT_3F * pointBufLen)()
-for i,p in enumerate(pointBuf):
+for i, p in enumerate(pointBuf):
     vectors[i].x = p[0]
     vectors[i].y = p[1]
     vectors[i].z = p[2]
 
-ty.TYRegisterWorldToColor(hh, vectors, 0, pointBufLen, buffer, 1024*1024*5)
+ty.TYRegisterWorldToColor(hh, vectors, 0, pointBufLen, buffer, 1024 * 1024 * 5)
 colorBuffer = cast(buffer, POINTER(c_uint16 * (1024 * 512 * 5))).contents
-colorBuffer = np.ctypeslib.as_array(colorBuffer)[:rgbBuf.shape[0]*rgbBuf.shape[1]].reshape((rgbBuf.shape[0], rgbBuf.shape[1], 1))
+colorBuffer = np.ctypeslib.as_array(colorBuffer)[:rgbBuf.shape[0] * rgbBuf.shape[1]].reshape((rgbBuf.shape[0], rgbBuf.shape[1]))
 
-import matplotlib.pyplot as plt
+_db = (ty.TY_VECT_3F * (rgbBuf.shape[0]*rgbBuf.shape[1]))()
+_wb = (ty.TY_VECT_3F * (rgbBuf.shape[0]*rgbBuf.shape[1]))()
 
-color = colorBuffer/100 + rgbBuf[:, :, 0:1]/2
-plt.imshow(colorBuffer.reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
-#plt.imshow(rgbBuf[:, :, 0:1].reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
-#plt.imshow(color.reshape(rgbBuf.shape[0], rgbBuf.shape[1]))  # Needs to be in row,col order
+k = 0
+for x, y in np.ndindex(colorBuffer.shape):
+    _db[k].x = x
+    _db[k].y = y
+    _db[k].z = colorBuffer[x][y]
+    k += 1
+
+ty.TYDepthToWorld(hh, _db, _wb, 0, (rgbBuf.shape[0] * rgbBuf.shape[1]))
+word = cast(_wb, POINTER(ty.TY_VECT_3F * (rgbBuf.shape[0]*rgbBuf.shape[1]))).contents
+word = [(v.x, v.y, v.z) for v in word]
+
+word = np.array(word).reshape((rgbBuf.shape[0], rgbBuf.shape[1], 3))
+
+#p = pcl.PointCloud(word.reshape(rgbBuf.shape[0]*rgbBuf.shape[1], 3).astype(float))
+#pcl.save(p, 'word.pcd')
+
+#import matplotlib.pyplot as plt
+#color = colorBuffer / 100 + rgbBuf[:, :, 0:1] / 2
+#plt.imshow(colorBuffer.reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
+# plt.imshow(rgbBuf[:, :, 0:1].reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
+# plt.imshow(color.reshape(rgbBuf.shape[0], rgbBuf.shape[1]))  # Needs to be in row,col order
 #plt.show()
-plt.savefig('depth.png')
-
-
+#plt.savefig('depth.png')
 
 import cv2.aruco as aruco
 import yaml
 
 cornerPoints = np.array([[[-87.5, 87.5, 0.0], [-57.5, 87.5, 0.0], [-57.5, 57.5, 0.0], [-87.5, 57.5, 0.0]],
-                             [[57.5, 87.5, 0.0], [87.5, 87.5, 0.0], [87.5, 57.5, 0.0], [57.5, 57.5, 0.0]],
-                             [[-87.5, -57.5, 0.0], [-57.5, -57.5, 0.0], [-57.5, -87.5, 0.0], [-87.5, -87.5, 0.0]],
-                             [[57.5, -57.5, 0.0], [87.5, -57.5, 0.0], [87.5, -87.5, 0.0], [57.5, -87.5, 0.0]]])
+                         [[57.5, 87.5, 0.0], [87.5, 87.5, 0.0], [87.5, 57.5, 0.0], [57.5, 57.5, 0.0]],
+                         [[-87.5, -57.5, 0.0], [-57.5, -57.5, 0.0], [-57.5, -87.5, 0.0], [-87.5, -87.5, 0.0]],
+                         [[57.5, -57.5, 0.0], [87.5, -57.5, 0.0], [87.5, -87.5, 0.0], [57.5, -87.5, 0.0]]])
 
 dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 
 dImg = img
-    # dImg = cv2.GaussianBlur(dImg, (5, 5), 0)
-    # _, dImg = cv2.threshold(dImg, 200, 255, cv2.THRESH_BINARY)
+# dImg = cv2.GaussianBlur(dImg, (5, 5), 0)
+# _, dImg = cv2.threshold(dImg, 200, 255, cv2.THRESH_BINARY)
 
 corners, ids, rejectedImgPoints = aruco.detectMarkers(dImg, dict)
 dImgd = aruco.drawDetectedMarkers(img, corners, ids)
-
 
 arm_corners = []
 arm_ids = []
@@ -146,11 +164,38 @@ rvecs, tvecs, _objPoints = aruco.estimatePoseSingleMarkers(np.array(arm_corners)
 for i in range(0, len(arm_corners)):
     aruco.drawAxis(dImgd, camera_matrix, dist_coeff, rvecs[i], tvecs[i], 40)
 
-if len(drug_corner)>0:
-    drug_rvecs, drug_tvecs, drug_objPoints = aruco.estimatePoseSingleMarkers(np.array([drug_corner]), 40, camera_matrix, dist_coeff)
+if len(drug_corner) > 0:
+    drug_rvecs, drug_tvecs, drug_objPoints = aruco.estimatePoseSingleMarkers(np.array([drug_corner]), 40, camera_matrix,
+                                                                             dist_coeff)
     aruco.drawAxis(dImgd, camera_matrix, dist_coeff, drug_rvecs, drug_tvecs, 60)
 
 
+width_array = np.sort(drug_corner[:, 0:1].reshape([4]).astype(int))
+height_array = np.sort(drug_corner[:, 1:2].reshape([4]).astype(int))
+
+drug_point = word[height_array[0]:height_array[3], width_array[0]:width_array[3]]
+drug_depth = colorBuffer[height_array[0]:height_array[3], width_array[0]:width_array[3]]
+
+#colorBuffer[ height_array[0]:height_array[3], width_array[0]:width_array[3]] = 100
+#plt.imshow(colorBuffer)  # Needs to be in row,col order
+# plt.imshow(rgbBuf[:, :, 0:1].reshape((rgbBuf.shape[0], rgbBuf.shape[1])))  # Needs to be in row,col order
+# plt.imshow(color.reshape(rgbBuf.shape[0], rgbBuf.shape[1]))  # Needs to be in row,col order
+#plt.show()
+
+drug_point_effect = []
+drug_depth_effect = []
+for x, y in np.ndindex(drug_point.shape[0], drug_point.shape[1]):
+    if drug_point[x][y][2] > 0:
+        drug_point_effect.append(drug_point[x][y])
+        drug_depth_effect.append(drug_depth[x][y])
+
+data = {'drug_point_effect': np.asarray(drug_point_effect).tolist()}
+with open("drug_point_effect.yaml", "w") as f:
+    yaml.dump(data, f)
+
+data = {'drug_depth_effect': np.asarray(drug_depth_effect).tolist()}
+with open("drug_depth_effect.yaml", "w") as f:
+    yaml.dump(data, f)
 
 imgPoints = np.zeros(shape=(0, 2))
 objectPoints = np.zeros(shape=(0, 3))
@@ -164,4 +209,85 @@ data = {'rvec': np.asarray(_rvec).tolist(), 'tvec': np.asarray(_tvec).tolist()}
 with open("rt_center.yaml", "w") as f:
     yaml.dump(data, f)
 
+axis = np.float32([[0,0,0]]).reshape(-1,3)
+imgpts, _ = cv2.projectPoints(axis, _rvec, _tvec, camera_matrix, dist_coeff)
+
+cp = imgpts[0][0].astype(int)
+center_depth = colorBuffer[(cp[1]-10):(cp[1]+10), (cp[0]-10):(cp[0]+10)]
+
+rgbBuf[height_array[0]:height_array[3], width_array[0]:width_array[3]] = 100
+rgbBuf[(cp[1]-10):(cp[1]+10), (cp[0]-10):(cp[0]+10), 0:1] = 200
+img = cv2.cvtColor(rgbBuf, cv2.COLOR_YUV2BGR_YUYV)
+cv2.imwrite("wt_1.png", img)
+#plt.imshow(rgbBuf)
+#plt.show()
+
+center_point = word[(cp[1]-10):(cp[1]+10), (cp[0]-10):(cp[0]+10)]
+center_point_effect = []
+center_depth_effect = []
+for x, y in np.ndindex(center_point.shape[0], center_point.shape[1]):
+    if center_point[x][y][2] > 0:
+        center_point_effect.append(center_point[x][y])
+        center_depth_effect.append(center_depth[x][y])
+
+data = {'center_point_effect': np.asarray(center_point_effect).tolist()}
+with open("center_point_effect.yaml", "w") as f:
+    yaml.dump(data, f)
+
+data = {'center_depth_effect': np.asarray(center_depth_effect).tolist()}
+with open("center_depth_effect.yaml", "w") as f:
+    yaml.dump(data, f)
+
+word[height_array[0]:height_array[3], width_array[0]:width_array[3]] = (0, 0, 0)
+word[(cp[1]-10):(cp[1]+10), (cp[0]-40):(cp[0]+40)] = (0, 0, 0)
+points = vtk.vtkPoints()
+# Create the topology of the point (a vertex)
+vertices = vtk.vtkCellArray()
+for x, y in np.ndindex(word.shape[0], word.shape[1]):
+    id = points.InsertNextPoint(word[x][y])
+    vertices.InsertNextCell(1)
+    vertices.InsertCellPoint(id)
+
+# Create a polydata object
+polydata = vtk.vtkPolyData()
+
+# Set the points and vertices we created as the geometry and topology of the polydata
+polydata.SetPoints(points)
+polydata.SetVerts(vertices)
+#polydata.GetPointData().SetScalars(Colors)
+
+# Visualize
+mapper = vtk.vtkPolyDataMapper()
+mapper.SetInputData(polydata)
+
+actor = vtk.vtkActor()
+actor.SetMapper(mapper)
+actor.GetProperty().SetPointSize(1)
+
+renderer = vtk.vtkRenderer()
+renderWindow = vtk.vtkRenderWindow()
+renderWindow.SetSize(1280, 960)
+renderWindow.AddRenderer(renderer)
+renderWindowInteractor = vtk.vtkRenderWindowInteractor()
+renderWindowInteractor.SetRenderWindow(renderWindow)
+
+renderer.AddActor(actor)
+
+renderWindow.Render()
+renderWindowInteractor.Start()
+
 cv2.imwrite('aruco_d.jpg', dImgd)
+
+I = np.identity(4, np.float64)
+rv = np.array(_rvec)
+tv = np.array(_tvec)
+rm, _ = cv2.Rodrigues(rv)
+
+I[0:3, 0:3] = rm
+I[0:3, 3:4] = tv.reshape(3, 1)
+
+data = {'matrix': np.asarray(I).tolist()}
+with open("matrix.yaml", "w") as f:
+    yaml.dump(data, f)
+
+print(I)
