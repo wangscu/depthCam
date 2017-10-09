@@ -6,6 +6,11 @@ import matplotlib.pyplot as plt
 import vtk
 import pcl
 from vtk.util import numpy_support
+from transformations import *
+from uf.wrapper.swift_api import SwiftAPI
+from uf.utils.log import *
+from time import sleep
+logger_init(logging.VERBOSE)
 
 buffer = create_string_buffer(1024 * 1024 * 5)
 
@@ -169,6 +174,9 @@ if len(drug_corner) > 0:
                                                                              dist_coeff)
     aruco.drawAxis(dImgd, camera_matrix, dist_coeff, drug_rvecs, drug_tvecs, 60)
 
+data = {'rvec': np.asarray(drug_rvecs[0]).tolist(), 'tvec': np.asarray(drug_tvecs[0]).tolist()}
+with open("drug_center.yaml", "w") as f:
+    yaml.dump(data, f)
 
 width_array = np.sort(drug_corner[:, 0:1].reshape([4]).astype(int))
 height_array = np.sort(drug_corner[:, 1:2].reshape([4]).astype(int))
@@ -204,7 +212,7 @@ for i in range(0, len(arm_corners)):
     imgPoints = np.append(imgPoints, np.array(arm_corners[i]), axis=0)
     objectPoints = np.append(objectPoints, cornerPoints[id - 1], axis=0)
 _retval, _rvec, _tvec = cv2.solvePnP(objectPoints, imgPoints, camera_matrix, dist_coeff)
-aruco.drawAxis(dImgd, camera_matrix, dist_coeff, _rvec, _tvec, 10)
+aruco.drawAxis(dImgd, camera_matrix, dist_coeff, _rvec, _tvec, 1000)
 data = {'rvec': np.asarray(_rvec).tolist(), 'tvec': np.asarray(_tvec).tolist()}
 with open("rt_center.yaml", "w") as f:
     yaml.dump(data, f)
@@ -238,6 +246,7 @@ data = {'center_depth_effect': np.asarray(center_depth_effect).tolist()}
 with open("center_depth_effect.yaml", "w") as f:
     yaml.dump(data, f)
 
+'''
 word[height_array[0]:height_array[3], width_array[0]:width_array[3]] = (0, 0, 0)
 word[(cp[1]-10):(cp[1]+10), (cp[0]-40):(cp[0]+40)] = (0, 0, 0)
 points = vtk.vtkPoints()
@@ -275,7 +284,7 @@ renderer.AddActor(actor)
 
 renderWindow.Render()
 renderWindowInteractor.Start()
-
+'''
 cv2.imwrite('aruco_d.jpg', dImgd)
 
 I = np.identity(4, np.float64)
@@ -286,8 +295,34 @@ rm, _ = cv2.Rodrigues(rv)
 I[0:3, 0:3] = rm
 I[0:3, 3:4] = tv.reshape(3, 1)
 
-data = {'matrix': np.asarray(I).tolist()}
+IR = inverse_matrix(I)
+
+p = [0, 0, 0 , 1]
+p[:3] = drug_tvecs[0][0]
+point = np.dot(IR, np.array(p))
+
+position = [int(point[1]), int(-point[0]), int(point[2]+50)]
+
+data = {'matrix': np.asarray(I).tolist(), 'drug_point':np.asarray(point).tolist(), 'position':np.asarray(position).tolist()}
 with open("matrix.yaml", "w") as f:
     yaml.dump(data, f)
 
 print(I)
+
+
+swift = SwiftAPI(filters={'hwid': 'USB VID:PID=2341:0042'})
+
+
+print(position)
+sleep(10)
+swift.set_position(position[0], position[1], 200, speed=1500)
+sleep(10)
+swift.set_position(position[0], position[1], position[2], speed=1500)
+sleep(10)
+swift.set_pump(True)
+sleep(2)
+swift.set_position(position[0], position[1], 200, speed=1500)
+sleep(10)
+swift.set_position(100, 200, 100, speed=1500)
+sleep(10)
+swift.set_pump(False)
