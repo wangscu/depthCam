@@ -69,7 +69,8 @@ for i in range(0, frame.validCount):
         elif image.pixelFormat == ty.TY_PIXEL_FORMAT_YUYV:
             rgbBuf = cast(image.buffer, POINTER(c_uint8 * (height * width * 2))).contents
             rgbBuf = np.ctypeslib.as_array(rgbBuf).reshape((height, width, 2))
-            img = cv2.cvtColor(rgbBuf, cv2.COLOR_YUV2RGB_YUYV)
+            img = cv2.cvtColor(rgbBuf, cv2.COLOR_YUV2BGR_Y422)
+            #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             #cv::undistort(color, u, pData->colorM, pData->colorD, pData->colorM);
             img = cv2.undistort(img,camera_matrix, dist_coeff)
             cv2.imwrite('img.png',img)
@@ -119,7 +120,11 @@ colorPoint= []
 for x in range(rgbBuf.shape[1]):
     for y in range(rgbBuf.shape[0]):
         z = colorBuffer[y][x]
-        color = int(img[y][x][0]) *256*256 + int(img[y][x][1]) *256 + int(img[y][x][2])
+        #R,G,B = YUV2RGB(img[y][x])
+        B,G,R = img[y][x]
+        color = (R << 16) | (G << 8) | B
+        #color = 255*65536+0*256+0
+        #color = ConvertYUVtoRGB(img[y][x])
         if not np.isnan(z):
             #float fx = m_oldIntrinsic.data[0];
             #float fy = m_oldIntrinsic.data[4];

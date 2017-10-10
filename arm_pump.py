@@ -20,13 +20,14 @@ logger_init(logging.VERBOSE)
 swift = SwiftAPI(filters={'hwid': 'USB VID:PID=2341:0042'})
 
 
-swift.set_position(203, -56, 200, speed=1500)
+p = [165, -66, 88]
+swift.set_position(p[0], p[1], 200, speed=1500)
 sleep(10)
-swift.set_position(203, -56, 73, speed=1500)
+swift.set_position(p[0], p[1], p[2], speed=1500)
 sleep(10)
 swift.set_pump(True)
 sleep(2)
-swift.set_position(203, -56, 200, speed=1500)
+swift.set_position(p[0], p[1], 200, speed=1500)
 sleep(10)
 swift.set_position(203, 200, 100, speed=1500)
 sleep(10)

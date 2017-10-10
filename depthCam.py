@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import vtk
 import pcl
 from vtk.util import numpy_support
+import yaml
 from transformations import *
 from uf.wrapper.swift_api import SwiftAPI
 from uf.utils.log import *
@@ -102,25 +103,29 @@ for i, p in enumerate(pointBuf):
     vectors[i].y = p[1]
     vectors[i].z = p[2]
 
+with open('calibration.yaml') as f:
+    loadeddict = yaml.load(f)
+camera_matrix = np.array(loadeddict.get('camera_matrix'))
+dist_coeff = np.array(loadeddict.get('dist_coeff'))
+
 ty.TYRegisterWorldToColor(hh, vectors, 0, pointBufLen, buffer, 1024 * 1024 * 5)
 colorBuffer = cast(buffer, POINTER(c_uint16 * (1024 * 512 * 5))).contents
 colorBuffer = np.ctypeslib.as_array(colorBuffer)[:rgbBuf.shape[0] * rgbBuf.shape[1]].reshape((rgbBuf.shape[0], rgbBuf.shape[1]))
 
-_db = (ty.TY_VECT_3F * (rgbBuf.shape[0]*rgbBuf.shape[1]))()
-_wb = (ty.TY_VECT_3F * (rgbBuf.shape[0]*rgbBuf.shape[1]))()
+word = np.zeros((rgbBuf.shape[0], rgbBuf.shape[1], 3), dtype=np.float64)
 
-k = 0
-for x, y in np.ndindex(colorBuffer.shape):
-    _db[k].x = x
-    _db[k].y = y
-    _db[k].z = colorBuffer[x][y]
-    k += 1
-
-ty.TYDepthToWorld(hh, _db, _wb, 0, (rgbBuf.shape[0] * rgbBuf.shape[1]))
-word = cast(_wb, POINTER(ty.TY_VECT_3F * (rgbBuf.shape[0]*rgbBuf.shape[1]))).contents
-word = [(v.x, v.y, v.z) for v in word]
-
-word = np.array(word).reshape((rgbBuf.shape[0], rgbBuf.shape[1], 3))
+for x in range(rgbBuf.shape[1]):
+    for y in range(rgbBuf.shape[0]):
+        z = colorBuffer[y][x]
+        fx = camera_matrix[0][0]
+        fy = camera_matrix[1][1]
+        cx = camera_matrix[0][2]
+        cy = camera_matrix[1][2]
+        _x = (x - cx) *z / fx
+        _y = (y - cy) *z / fy
+        word[y][x][0] = _x
+        word[y][x][1] = _y
+        word[y][x][2] = z
 
 #p = pcl.PointCloud(word.reshape(rgbBuf.shape[0]*rgbBuf.shape[1], 3).astype(float))
 #pcl.save(p, 'word.pcd')
@@ -160,10 +165,6 @@ for corner, id in zip(corners, ids):
         arm_corners.append(corner[0])
         arm_ids.append(id[0])
 
-with open('calibration.yaml') as f:
-    loadeddict = yaml.load(f)
-camera_matrix = np.array(loadeddict.get('camera_matrix'))
-dist_coeff = np.array(loadeddict.get('dist_coeff'))
 
 rvecs, tvecs, _objPoints = aruco.estimatePoseSingleMarkers(np.array(arm_corners), 30, camera_matrix, dist_coeff)
 for i in range(0, len(arm_corners)):
@@ -308,6 +309,8 @@ with open("matrix.yaml", "w") as f:
     yaml.dump(data, f)
 
 print(I)
+
+exit(0)
 
 
 swift = SwiftAPI(filters={'hwid': 'USB VID:PID=2341:0042'})
